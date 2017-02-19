@@ -10,6 +10,7 @@ class SomeClass {
         ~SomeClass() {};
         void inc_ref_count() { m_ref++; };
         int dec_ref_count() { return --m_ref;};
+        int get_ref_count() const { return m_ref; }
     private:
         int m_ref;
 };
@@ -32,6 +33,10 @@ void testcase()
 
     if (ptr_class == ptr_class_assign)
         cout << "Test ' == class_ptr' on assign operator" << endl;
+
+    cout << "Test '.' oprator: the reference count is "  << (*ptr_class).get_ref_count() << endl;
+    cout << "Test '->' oprator: the reference count is "  << ptr_class->get_ref_count() << endl;
+     
 }
 
 int main(void)
