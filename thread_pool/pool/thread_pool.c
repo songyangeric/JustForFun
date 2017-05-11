@@ -4,32 +4,32 @@
 #include <pthread.h>
 #include "thread_pool.h"
 
-void *thread_create(void *arg)
+void *thread_routine(void *arg)
 {
     thread_pool_t *pool = (thread_pool_t *)arg;
     thread_pool_task_t *task;
 
     for (;;) {
-        pthread_mutex_lock(&queue_lock);
+        pthread_mutex_lock(&pool->queue_lock);
         while (thread_pool_empty(pool) && !pool->shutdown) {
-            pthread_cond_wait(&pool->queue_not_empty, &queue_lock);
+            pthread_cond_wait(&pool->queue_not_empty, &pool->queue_lock);
         }
 
         if (pool->shutdown) {
-            pthread_mutex_unlock(&queue_lock);
+            pthread_mutex_unlock(&pool->queue_lock);
             pthread_exit(NULL);
         }
 
-        task = pool->queue[pool->front];
+        task = &pool->queue[pool->front];
         pool->front = (pool->front + 1) % pool->max_queue_size;
 
         if (pool->front != pool->rear) {
             pthread_cond_broadcast(&pool->queue_not_empty);
         } 
 
-        pthread_mutex_unlock(&queue_lock);
+        pthread_mutex_unlock(&pool->queue_lock);
 
-        (task->process)(task->arg);
+        (*(task->process))(task->arg);
     }
 }
 
@@ -61,7 +61,7 @@ void thread_pool_init(thread_pool_t *thread_pool, int num_thread, int max_queue_
         exit(-1);
     }
 
-    if ((pool->queue = malloc(sizeof(struct thread_pool_task_t) * max_queue_size)) == NULL) {
+    if ((pool->queue = malloc(sizeof(thread_pool_task_t) * max_queue_size)) == NULL) {
         perror("malloc queue");
         free(pool);
         exit(-1);
@@ -76,7 +76,7 @@ void thread_pool_init(thread_pool_t *thread_pool, int num_thread, int max_queue_
 
     int i;
     for (i = 0; i < num_thread; i++) {
-        if (pthread_create(&pool->threads[i], NULL, thread_create, (void *)pool) != 0) {
+        if (pthread_create(&pool->threads[i], NULL, thread_routine, (void *)pool) != 0) {
             perror("pthread_create");
             free(pool->threads);
             free(pool->queue);
@@ -103,13 +103,13 @@ int thread_pool_add(thread_pool_t *pool, void (*process)(void *), void *arg)
         return -1;
     }
 
-    task = pool->queue[pool->rear];
+    task = &pool->queue[pool->rear];
     pool->rear = (pool->rear + 1) % pool->max_queue_size;
     task->process = process;
-    taks->arg = arg;
+    task->arg = arg;
 
     if (pool->rear != pool->front) {
-        pthread_cond_broadcast(&pool->queue_not_full);_
+        pthread_cond_broadcast(&pool->queue_not_full);
     }
 
     pthread_mutex_unlock(&pool->queue_lock);
@@ -117,14 +117,36 @@ int thread_pool_add(thread_pool_t *pool, void (*process)(void *), void *arg)
     return 0;
 }
 
-bool thread_pool_empty(thread_pool_t *pool)
+int thread_pool_empty(thread_pool_t *pool)
 {
     return (pool->front == pool->rear);
 }
 
-bool thread_pool_full(thread_pool_t *pool)
+int thread_pool_full(thread_pool_t *pool)
 {
     return ((pool->rear + 1) % pool->max_queue_size == pool->front);
 }
 
 int thread_pool_destroy(thread_pool_t *pool)
+{
+    pthread_mutex_lock(&pool->queue_lock);
+
+    pool->shutdown = 1;
+    pthread_mutex_unlock(&pool->queue_lock);
+    
+    int i;
+    for (i = 0; i < pool->num_thread; i++) {
+        if (pthread_join(pool->threads[i], NULL) != 0) {
+            perror("pthread_join");
+            exit(-1);
+        }
+    }
+
+    free(pool->threads);
+    free(pool->queue);
+    free(pool);
+
+    return 0;
+}
+
+
