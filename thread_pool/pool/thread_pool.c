@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>
+#include <string.h>
 #include "thread_pool.h"
 
 void *thread_routine(void *arg)
@@ -23,9 +24,7 @@ void *thread_routine(void *arg)
         task = &pool->queue[pool->front];
         pool->front = (pool->front + 1) % pool->max_queue_size;
 
-        if (pool->front != pool->rear) {
-            pthread_cond_broadcast(&pool->queue_not_empty);
-        } 
+        // pthread_cond_broadcast(&pool->queue_not_full);
 
         pthread_mutex_unlock(&pool->queue_lock);
 
@@ -35,12 +34,13 @@ void *thread_routine(void *arg)
 
 void thread_pool_init(thread_pool_t *thread_pool, int num_thread, int max_queue_size)
 {
-    thread_pool_t *pool = NULL;
+    thread_pool_t *pool = thread_pool;
     pool = (thread_pool_t *)malloc(sizeof(thread_pool_t));
     if (pool == NULL) {
         perror("malloc");
         exit(-1);
     }
+    memset(pool, 0, sizeof(thread_pool_t));
 
     pool->num_thread = num_thread;
     pool->max_queue_size = max_queue_size;
@@ -66,6 +66,7 @@ void thread_pool_init(thread_pool_t *thread_pool, int num_thread, int max_queue_
         free(pool);
         exit(-1);
     }
+    memset(pool->queue, 0, sizeof(thread_pool_task_t) * max_queue_size);
 
     if ((pool->threads = malloc(sizeof(pthread_t) * num_thread)) == NULL) {
         perror("malloc threads");
@@ -73,6 +74,7 @@ void thread_pool_init(thread_pool_t *thread_pool, int num_thread, int max_queue_
         free(pool);
         exit(-1);
     }
+    memset(pool->threads, 0, sizeof(pthread_t) * num_thread);
 
     int i;
     for (i = 0; i < num_thread; i++) {
@@ -84,8 +86,6 @@ void thread_pool_init(thread_pool_t *thread_pool, int num_thread, int max_queue_
             exit(-1);
         }
     }
-
-    thread_pool = pool;
 }
 
 int thread_pool_add(thread_pool_t *pool, void (*process)(void *), void *arg)
@@ -108,9 +108,7 @@ int thread_pool_add(thread_pool_t *pool, void (*process)(void *), void *arg)
     task->process = process;
     task->arg = arg;
 
-    if (pool->rear != pool->front) {
-        pthread_cond_broadcast(&pool->queue_not_full);
-    }
+    pthread_cond_broadcast(&pool->queue_not_empty);
 
     pthread_mutex_unlock(&pool->queue_lock);
 

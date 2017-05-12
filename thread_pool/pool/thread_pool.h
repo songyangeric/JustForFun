@@ -8,7 +8,6 @@
 typedef struct thread_pool_task {
     void (*process)(void *);
     void *arg;
-    struct thread_pool_task *next;
 }thread_pool_task_t;
 
 typedef struct thread_pool {
