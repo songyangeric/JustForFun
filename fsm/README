@@ -1,0 +1,13 @@
+There are 4 state for door:
+
+OPENED, CLOSED, LOCKED, UNLOCKED
+
+FSM:
+
+OPENED    --------->   CLOSED 
+  ||      <---------     ||
+  ||                     ||
+  ||                     ||
+  ||                     ||
+UNLOCKE   --------->   LOCKED
+          <---------
